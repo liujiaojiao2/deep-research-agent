@@ -63,3 +63,7 @@ class SupervisorState(TypedDict, total=False):
     # HarnessForge 联合进化字段
     evolution_recorded: bool
     evolution_strategy_hint: str
+
+    # Memento-Skills 技能库字段
+    skill_extracted: bool
+    skill_injection: str

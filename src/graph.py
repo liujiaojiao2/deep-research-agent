@@ -38,6 +38,11 @@ from src.agents import (
 )
 from src.agents.evolution_agent import evolution_log_node
 from src.agents.human_review_agent import human_review_node
+from src.agents.skill_agent import (
+    _format_skill_injection,
+    match_skills,
+    skill_library_node,
+)
 from src.agents.memory_archive_agent import memory_archive_node
 from src.agents.rewoo_planner_agent import rewoo_planner_node
 from src.agents.rewoo_worker_agent import rewoo_worker_node
@@ -49,11 +54,27 @@ def _rewoo_researcher_node(state: SupervisorState) -> dict:
 
     对 graph 透明，等价于一个 researcher 节点；但 LLM 调用降到 1 次，
     比 ReAct 的 N+1 次省 N 次。
+
+    Phase 8.2: 注入 Memento-Skills 匹配的技能 SOP。
     """
+    # 匹配技能 + 注入到 state.research_brief（planner 会用到）
+    skill_hint = ""
+    try:
+        matched = match_skills(state.get("query", ""), top_k=2)
+        skill_hint = _format_skill_injection(matched)
+    except Exception:
+        pass
+    if skill_hint:
+        brief = (state.get("research_brief") or "") + "\n" + skill_hint
+        state = {**state, "research_brief": brief}
+
     plan_update = rewoo_planner_node(state)
     merged = {**state, **plan_update}
     worker_update = rewoo_worker_node(merged)
-    return {**plan_update, **worker_update}
+    result = {**plan_update, **worker_update}
+    if skill_hint:
+        result["skill_injection"] = skill_hint[:200]
+    return result
 
 
 def _select_researcher():
@@ -92,6 +113,7 @@ def build_main_graph(interactive: bool = False):
     g.add_node("final_report", final_report_node)
     g.add_node("memory_archive", memory_archive_node)
     g.add_node("evolution_log", evolution_log_node)
+    g.add_node("skill_library", skill_library_node)
     if interactive:
         g.add_node("human_review", human_review_node)
 
@@ -128,7 +150,8 @@ def build_main_graph(interactive: bool = False):
     # final_report → memory_archive → evolution_log → END
     g.add_edge("final_report", "memory_archive")
     g.add_edge("memory_archive", "evolution_log")
-    g.add_edge("evolution_log", END)
+    g.add_edge("evolution_log", "skill_library")
+    g.add_edge("skill_library", END)
 
     if interactive:
         return g.compile(checkpointer=InMemorySaver())
