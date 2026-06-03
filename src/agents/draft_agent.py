@@ -66,15 +66,32 @@ _DRAFT_PROMPT = """你是一个专业研究员，请基于以下研究资料撰�
 
 
 def write_research_brief(state: SupervisorState, llm=None) -> dict:
-    """节点：把 query 转成研究简报。会自动注入用户偏好（如有）。"""
+    """节点：把 query 转成研究简报。会自动注入用户偏好 + HarnessForge 进化策略。"""
     llm = llm or get_llm_for("brief")
+    # Phase 8.1: 检索历史最优策略
+    strategy_hint = state.get("evolution_strategy_hint", "") or _load_evolution_hint(state["query"])
     prompt = _BRIEF_PROMPT.format(
         query=state["query"],
         preferences_block=_load_preferences_block(state["query"]),
     )
+    if strategy_hint:
+        prompt = prompt.replace("请输出", strategy_hint + "\n\n请输出")
     response = llm.invoke(prompt)
     content = response.content if hasattr(response, "content") else str(response)
     return {"research_brief": content}
+
+
+def _load_evolution_hint(query: str) -> str:
+    """从 evolution log 检索最优策略（不依赖 state，兜底路径）。"""
+    if os.getenv("ENABLE_EVOLUTION", "true").lower() == "false":
+        return ""
+    try:
+        from src.agents.evolution_agent import _format_strategy_hint, recall_evolution
+
+        strategies = recall_evolution(query, top_k=2)
+        return _format_strategy_hint(strategies)
+    except Exception:
+        return ""
 
 
 def write_draft_report(state: SupervisorState, llm=None) -> dict:

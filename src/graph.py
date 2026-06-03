@@ -36,6 +36,7 @@ from src.agents import (
     write_draft_report,
     write_research_brief,
 )
+from src.agents.evolution_agent import evolution_log_node
 from src.agents.human_review_agent import human_review_node
 from src.agents.memory_archive_agent import memory_archive_node
 from src.agents.rewoo_planner_agent import rewoo_planner_node
@@ -90,6 +91,7 @@ def build_main_graph(interactive: bool = False):
     g.add_node("revision", revision_node)
     g.add_node("final_report", final_report_node)
     g.add_node("memory_archive", memory_archive_node)
+    g.add_node("evolution_log", evolution_log_node)
     if interactive:
         g.add_node("human_review", human_review_node)
 
@@ -123,9 +125,10 @@ def build_main_graph(interactive: bool = False):
     g.add_edge("red_team", "revision")
     g.add_edge("revision", "supervisor")
 
-    # final_report → memory_archive → END
+    # final_report → memory_archive → evolution_log → END
     g.add_edge("final_report", "memory_archive")
-    g.add_edge("memory_archive", END)
+    g.add_edge("memory_archive", "evolution_log")
+    g.add_edge("evolution_log", END)
 
     if interactive:
         return g.compile(checkpointer=InMemorySaver())

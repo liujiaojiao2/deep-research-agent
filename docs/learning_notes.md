@@ -1499,9 +1499,70 @@ MCP 是**"协议抽象"** 的典型应用：
 第 3 遍（长期）：把本项目学到的模式迁移到自己的 Agent 项目
 ```
 
-## 接下来可做的方向（2026 前沿对接）
+---
 
-- [ ] HarnessForge 式联合进化（harness + policy 同时进化）
-- [ ] Memento-Skills 式技能库（把成功经验编码为可复用技能）
-- [ ] Trace 协议标准化（H0-H3 论文标准）
+## 第 14 章：HarnessForge 联合进化 —— 不仅修复输出，还要学会"怎么做更好"
+
+### 14.1 这章解决什么
+
+Phase 3 的自进化（red_team → quality → revision）只修复报告文本——这是 **output-level** 的进化。
+HarnessForge (2026.06) 的核心思想：**同时进化 harness（工具策略、prompt 模板）和 policy（报告内容）**。
+
+举例：如果两次研究"对比两种算法"都拿到 8.5 分，系统应该记住"先用 wikipedia 定义 → 用 arxiv 找论文"这个工具顺序，下次同类任务自动复用。
+
+### 14.2 实现：策略快照 + 语义召回 + brief 注入
+
+```
+每次 run 结束:
+  evolution_log_node → 分数 >= 7.0 时:
+    LLM 对 query 分类（"算法对比" / "技术原理" / "实操指南"）
+    → 记录 {query_type, tools, researcher_mode, score, timestamp}
+    → BGE 嵌入 → ChromaDB evolution_log collection
+
+下次 run 开始:
+  brief_writer 查 recall_evolution(query)
+    → 语义检索相似 query 的历史最优策略
+    → 注入 brief prompt: "你已知的过往成功经验：[策略1, 策略2]"
+```
+
+### 14.3 关键代码位置
+
+| 文件 | 行号 | 看什么 |
+|---|---|---|
+| `src/agents/evolution_agent.py` | 62-72 | `_extract_tool_sequence` —— 从 source 字段拆解工具使用序列 |
+| `src/agents/evolution_agent.py` | 75-89 | `_classify_query_type` —— 让 LLM 给 query 打标签 |
+| `src/agents/evolution_agent.py` | 108-134 | `record_evolution` —— **>= 7.0 分才记录**，hash 去重 |
+| `src/agents/evolution_agent.py` | 137-162 | `recall_evolution` —— BGE 检索 + 按 score 降序 |
+| `src/agents/evolution_agent.py` | 165-176 | `_format_strategy_hint` —— 策略转 prompt 注入片段 |
+| `src/agents/draft_agent.py` | 84-91 | `_load_evolution_hint` —— brief_writer 注入点 |
+
+### 14.4 实测数据
+
+```
+evolution entries: 7 条
+query "GRPO 算法改进" 召回:
+  [算法创新点] score=8.5 sim=0.64 tools=[local_knowledge_search, wikipedia_search]
+  [技术原理]    score=8.1 sim=0.55 tools=[web_search]
+```
+
+### 14.5 简历可量化
+
+```
+"实现 HarnessForge 式 harness+policy 联合进化:
+- 每次高分 run (score>=7.0) 自动归档策略快照(工具序列/query 类型/researcher 模式)
+- BGE 语义召回，同类 query 自动注入历史最优策略到 brief_writer
+- hash 去重 + 低分过滤，7 条策略已自动学习
+- 所有记录持久化到 ChromaDB，跨进程保留"
+```
+
+### 14.6 一句话带走
+
+> **修复报告只解决"这次怎么写"；HarnessForge 解决的是"下次怎么做"——让 Agent 从自己的成功 run 里学会复用最优策略。**
+
+---
+
+## 接下来可做的方向
+
+- [ ] Memento-Skills 式技能库（成功经验编码为可复用 skill）
+- [ ] Trace 协议标准化（H0-H3 审计级别 trace）
 - [ ] Adaptive Auto-Harness（按任务类型自适应调参）

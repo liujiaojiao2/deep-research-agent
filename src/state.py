@@ -59,3 +59,7 @@ class SupervisorState(TypedDict, total=False):
     rewoo_tokens_saved_estimate: int
     rewoo_elapsed_seconds: float
     rewoo_parallel_workers: int
+
+    # HarnessForge 联合进化字段
+    evolution_recorded: bool
+    evolution_strategy_hint: str
