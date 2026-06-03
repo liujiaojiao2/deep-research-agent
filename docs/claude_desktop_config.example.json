@@ -1,0 +1,25 @@
+{
+  "_README": "Claude Desktop 接入 DeepResearch Tools MCP Server 示例。把这段拷到 ~/Library/Application Support/Claude/claude_desktop_config.json 里。重启 Claude Desktop 后会看到 6 个新工具。",
+  "_README_2": "把 /ABSOLUTE/PATH/TO 改成你本地路径。如果 uv 不在 PATH，用绝对路径 /Users/<you>/.local/bin/uv。",
+
+  "mcpServers": {
+    "deep-research-tools": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/ABSOLUTE/PATH/TO/deepreasearchagent/deep-research-agent",
+        "run",
+        "python",
+        "scripts/mcp_server.py",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "DEEPSEEK_API_KEY": "sk-xxxxxxxxxxxx",
+        "RESEARCHER_MODE": "rewoo",
+        "ENABLE_RAG": "true",
+        "ENABLE_MEMORY": "true"
+      }
+    }
+  }
+}

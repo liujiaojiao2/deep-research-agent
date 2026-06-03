@@ -1,0 +1,42 @@
+[
+  {
+    "id": "Q1_local_kb",
+    "query": "项目 Q1 那次事故的根因是什么？请基于本地知识库回答。",
+    "category": "rag",
+    "expects_tools": ["local_knowledge_search"],
+    "expected_keywords": ["DuckDuckGo", "反爬", "限流", "10.42.18.7"],
+    "rationale": "考 RAG：答案只存在于本地 demo 文档 03_deepresearch_postmortem.md"
+  },
+  {
+    "id": "Q2_grpo_vs_ppo",
+    "query": "GRPO 算法相比 PPO 的核心差异是什么？请综合学术论文与博客来源。",
+    "category": "react_multi_tool",
+    "expects_tools": ["arxiv_search"],
+    "expected_keywords": ["价值网络", "组内", "PPO", "GRPO"],
+    "rationale": "考 ReAct 多工具：需要 LLM 自主选择 arxiv 而非只查 web"
+  },
+  {
+    "id": "Q3_grpo_internal_benchmark",
+    "query": "我们内部复现 GRPO 时，KL 系数 beta 设置成多少？为什么和论文不同？",
+    "category": "rag",
+    "expects_tools": ["local_knowledge_search"],
+    "expected_keywords": ["0.001", "0.04", "collapse"],
+    "rationale": "考 RAG 精确事实检索：答案在 02_grpo_internal_benchmark.md"
+  },
+  {
+    "id": "Q4_rag_concept",
+    "query": "什么是 RAG（检索增强生成）？请说明其工作原理与典型应用场景。",
+    "category": "concept",
+    "expects_tools": ["wikipedia_search"],
+    "expected_keywords": ["检索", "嵌入", "向量", "生成"],
+    "rationale": "考综合概念回答：百科 + 推理结合"
+  },
+  {
+    "id": "Q5_reasoning",
+    "query": "为什么大语言模型容易产生幻觉？请从训练范式、数据特性、推理机制三个角度分析。",
+    "category": "reasoning",
+    "expects_tools": [],
+    "expected_keywords": ["训练", "数据", "推理", "概率"],
+    "rationale": "考逻辑推理：无确定外部答案，看 LLM 论证质量"
+  }
+]
