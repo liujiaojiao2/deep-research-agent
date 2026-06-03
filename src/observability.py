@@ -160,8 +160,16 @@ class Tracer:
             md.append(f"| {ev.ts:.2f} | {ev.node} | {ev.kind} | `{info_str}` |\n")
         return "".join(md)
 
+    def to_jsonl(self) -> bytes:
+        from src.trace_protocol import jsonl_serialize
+
+        return jsonl_serialize(self.events, run_id=self.run_id)
+
     def dump(self, save_dir: Path) -> Path:
         save_dir.mkdir(parents=True, exist_ok=True)
         out = save_dir / f"trace_{self.run_id}.md"
         out.write_text(self.to_markdown(), encoding="utf-8")
+        # 同时写 JSONL（机器可读 + 审计链）
+        jsonl_path = save_dir / f"trace_{self.run_id}.jsonl"
+        jsonl_path.write_bytes(self.to_jsonl())
         return out

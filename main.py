@@ -143,7 +143,8 @@ def run_research(
 
     console.rule("[bold green]✅ 完成[/bold green]")
     console.print(f"📄 报告保存至: {out_path}")
-    console.print(f"🧭 Trace: {trace_path}")
+    console.print(f"🧭 Trace (MD): {trace_path}")
+    console.print(f"[dim]🧭 Trace (JSONL + hash chain): {save_dir / f'trace_{run_id}.jsonl'}[/dim]")
     if cached_ok:
         console.print("[dim]💾 已写入语义缓存（相同/相似 query 下次直接命中）[/dim]")
     console.print(f"🔁 迭代次数: {final_state.get('iteration_count', 0)}")

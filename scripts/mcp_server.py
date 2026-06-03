@@ -172,6 +172,17 @@ def python_calculator(expression: str) -> str:
 
 # ---------- 元资源：把项目信息暴露为 MCP resource ----------
 
+@mcp.resource("trace://latest")
+def trace_latest() -> str:
+    """返回最新一次 run 的 JSONL trace（如存在）。"""
+    from pathlib import Path
+
+    outputs = sorted(Path("outputs").glob("trace_*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if outputs:
+        return outputs[0].read_text(encoding="utf-8")[:5000]
+    return "暂无 trace 文件"
+
+
 @mcp.resource("project://meta")
 def project_meta() -> str:
     """暴露项目元信息（如 README / 学习笔记摘要），便于客户端理解工具能力。"""
