@@ -11,9 +11,14 @@
 """
 from __future__ import annotations
 
+import os
+
 from src.state import SupervisorState
 
-QUALITY_THRESHOLD = 7.0
+# 实测 quality_eval 存在自评偏差（偏高），
+# 7.0 时部分本应走 red_team 的问题被错误路由到 final_report。
+# 推荐生产环境设为 8.5 以确保自进化循环充分介入。
+QUALITY_THRESHOLD = float(os.getenv("QUALITY_THRESHOLD", "7.0"))
 DEFAULT_MAX_ITERATIONS = 3
 
 AGENTS = (

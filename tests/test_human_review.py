@@ -133,7 +133,7 @@ def test_interactive_graph_pauses_then_approves(monkeypatch):
     from langgraph.types import Command
 
     llm = _ScriptedLLM([
-        ("请基于以下研究资料撰写", "# 初稿"),
+        ("研究资料（已压缩）", "# 初稿"),
         ("请就以下问题生成一份研究简报", "brief"),
         ("待评估对象", '{"accuracy":5,"completeness":5,"logic":5,"citation":5,"overall":5,"feedback":"低"}'),
         ("最终润色", "# 终稿"),
@@ -188,7 +188,7 @@ def test_interactive_graph_reject_triggers_red_team(monkeypatch):
                 return SimpleNamespace(content=next(quality_outputs))
             if "请基于下面的反馈和资料" in prompt:
                 return SimpleNamespace(content="# 初稿 V2")
-            if "请基于以下研究资料撰写" in prompt:
+            if "研究资料（已压缩）" in prompt or "请基于以下研究资料撰写" in prompt:
                 return SimpleNamespace(content="# 初稿")
             if "请就以下问题生成一份研究简报" in prompt:
                 return SimpleNamespace(content="brief")

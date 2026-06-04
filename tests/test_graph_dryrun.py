@@ -70,7 +70,7 @@ def test_happy_path_high_score_one_iter(monkeypatch):
             # compress_research：必须包含"压缩"以便看出
             ("请将以下搜索结果压缩", "- 关键要点: x\n- 来源: https://e.com/0"),
             # draft_writer（先匹配，避免被 brief 关键词截胡）
-            ("请基于以下研究资料撰写", "# 初稿\n## 摘要\n初稿内容..."),
+            ("研究资料（已压缩）", "# 初稿\n## 摘要\n初稿内容..."),
             # brief_writer
             ("请就以下问题生成一份研究简报", "## 子问题\n- s1\n- s2\n## 关键词\n- k1\n## 结构\n- 摘要"),
             # quality_eval：高分 → 直接进 final
@@ -129,7 +129,7 @@ def test_self_evolution_low_then_high(monkeypatch):
             # 顺序敏感：先匹配 draft/revise（它们的 prompt 含有"研究简报"标签）
             if "请基于下面的反馈和资料" in prompt:
                 return SimpleNamespace(content="# 初稿 V2\n修订后内容")
-            if "请基于以下研究资料撰写" in prompt:
+            if "研究资料（已压缩）" in prompt or "请基于以下研究资料撰写" in prompt:
                 return SimpleNamespace(content="# 初稿\n旧版本")
             if "待评估对象" in prompt:
                 return SimpleNamespace(content=quality_response(prompt))

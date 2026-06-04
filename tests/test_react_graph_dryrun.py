@@ -65,7 +65,7 @@ def _patch_other_agents(monkeypatch, llm):
 
 def test_react_mode_happy_path(monkeypatch):
     llm = _ScriptedLLM([
-        ("请基于以下研究资料撰写", "# 初稿\n## 摘要\n初稿内容..."),
+        ("研究资料（已压缩）", "# 初稿\n## 摘要\n初稿内容..."),
         ("请就以下问题生成一份研究简报", "## 子问题\n- s1"),
         (
             "待评估对象",

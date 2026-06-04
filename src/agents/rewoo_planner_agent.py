@@ -68,7 +68,7 @@ _PLANNER_PROMPT = """你是一个 ReWOO 风格的研究规划器。给定研究�
 
 要求：
 1. 覆盖简报中所有子问题，每个子问题至少 1 个步骤
-2. 优先使用 local_knowledge_search（如有相关），再用 wikipedia/arxiv/web_search
+2. **local_knowledge_search 必须第一个调用**——本地知识库中有公网搜不到的专属信息
 3. 同一工具不要重复调用相同 args
 4. 工具名必须严格匹配；args 必须是 dict，至少含 "query" 字段
 5. 只输出 JSON 数组，不要解释、不要 markdown 代码块包裹
