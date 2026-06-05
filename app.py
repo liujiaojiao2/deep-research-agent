@@ -11,6 +11,7 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(__file__))
 
 from src.token_tracker import TokenTracker, get_tracker, reset_tracker, MODEL_PRICING
+from src.obsidian import export_to_obsidian, is_obsidian_configured
 
 # ---------- page config ----------
 st.set_page_config(
@@ -64,6 +65,11 @@ with st.sidebar:
         help="自进化（red_team → revision → re-eval）的最大轮次",
     )
     st.divider()
+    obs_ok = is_obsidian_configured()
+    if obs_ok:
+        st.caption("📝 Obsidian 导出已配置")
+    else:
+        st.caption("📝 Obsidian 未配置（设 OBSIDIAN_VAULT_PATH 启用）")
     st.caption("环境变量配置在运行前注入，不影响全局设置。")
 
 # ---------- query input ----------
@@ -281,12 +287,34 @@ if st.button("🚀 开始研究", type="primary", use_container_width=True):
         final_text = final_state.get("final_report") or final_state.get("draft_report") or "*报告生成失败*"
         st.markdown(final_text)
 
-        st.download_button(
-            label="📥 下载 Markdown 报告",
-            data=final_text,
-            file_name=f"research_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
-            mime="text/markdown",
-        )
+        dl_col, obs_col = st.columns([1, 1])
+        with dl_col:
+            st.download_button(
+                label="📥 下载 Markdown 报告",
+                data=final_text,
+                file_name=f"research_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                mime="text/markdown",
+                use_container_width=True,
+            )
+        with obs_col:
+            if is_obsidian_configured():
+                if st.button("📝 一键导出到 Obsidian", use_container_width=True):
+                    path = export_to_obsidian(
+                        content=final_text,
+                        query=query.strip(),
+                        quality_score=quality_full if quality_full else None,
+                    )
+                    if path:
+                        st.success(f"已导出到 Obsidian: `{path}`")
+                    else:
+                        st.error("导出失败，请检查 Obsidian Vault 路径配置")
+            else:
+                st.button(
+                    "📝 Obsidian 未配置",
+                    disabled=True,
+                    use_container_width=True,
+                    help="请在 .env 中设置 OBSIDIAN_VAULT_PATH",
+                )
 
     except Exception as e:
         st.error(f"运行出错: {type(e).__name__}: {e}")
