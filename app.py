@@ -1,4 +1,4 @@
-"""DeepResearch Agent — Streamlit 互动 Demo。"""
+"""DeepResearch Agent — Streamlit 互动 Demo，含 Token 追踪与成本可视化。"""
 from __future__ import annotations
 
 import os
@@ -10,7 +10,7 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from src.graph import build_main_graph
+from src.token_tracker import TokenTracker, get_tracker, reset_tracker, MODEL_PRICING
 
 # ---------- page config ----------
 st.set_page_config(
@@ -21,6 +21,17 @@ st.set_page_config(
 
 st.title("🔬 DeepResearch Agent")
 st.caption("Multi-Agent 深度研究报告生成系统 · LangGraph · Supervisor 路由 · 自进化闭环")
+
+
+# ---------- inject token tracking into LLM pipeline ----------
+def _install_token_tracker(tracker: TokenTracker):
+    """Monkey-patch ChatOpenAI.invoke 类方法，所有 LLM 调用自动追踪。
+
+    类级别 patch 自动覆盖 bind_tools / ReAct 内部调用等所有路径，
+    无需逐个 agent 模块 patch。
+    """
+    tracker.install()
+
 
 # ---------- sidebar: 配置 ----------
 with st.sidebar:
@@ -67,7 +78,13 @@ if st.button("🚀 开始研究", type="primary", use_container_width=True):
     os.environ["RESEARCHER_MODE"] = mode
     os.environ["QUALITY_THRESHOLD"] = str(quality_threshold)
 
-    # build graph
+    # init token tracker and install
+    reset_tracker()
+    tracker = get_tracker()
+    _install_token_tracker(tracker)
+
+    from src.graph import build_main_graph
+
     graph = build_main_graph(interactive=False)
 
     initial_state = {
@@ -88,15 +105,7 @@ if st.button("🚀 开始研究", type="primary", use_container_width=True):
     # ---------- progress containers ----------
     progress_bar = st.progress(0, text="初始化...")
     status_area = st.empty()
-
-    # containers for each phase
-    brief_col = st.empty()
-    research_col = st.empty()
-    draft_col = st.empty()
-    quality_col = st.empty()
-    redteam_col = st.empty()
-    revision_col = st.empty()
-    final_col = st.empty()
+    token_area = st.sidebar.empty()
 
     # step tracker
     steps: list[dict] = []
@@ -166,17 +175,54 @@ if st.button("🚀 开始研究", type="primary", use_container_width=True):
                         "summary": summary,
                     })
 
-                    # update progress
                     progress = min(len(steps) / 12, 1.0)
                     progress_bar.progress(progress, text=f"Step {len(steps)}: {phase_labels.get(node_name, node_name)}")
 
-                    # show current step highlights
                     with status_area.container():
                         for step in steps[-5:]:
                             icon = "✅" if step["node"] != "supervisor" else "🧭"
                             st.markdown(f"{icon} `{step['ts']}` **{step['label']}** — {step['summary']}")
 
-        # ---------- 展开各阶段详细内容 ----------
+                    # 实时更新 token 统计
+                    with token_area.container():
+                        total = tracker.total
+                        st.metric("累计 Token", f"{total.total_tokens:,}")
+                        st.metric("LLM 调用次数", len(tracker.records))
+                        st.metric("预估成本", f"¥{tracker.total_cost_yuan:.4f}")
+
+        # ---------- Token 使用详细面板 ----------
+        with st.expander("💰 Token 用量与成本明细", expanded=True):
+            c1, c2, c3 = st.columns(3)
+            c1.metric("LLM 调用次数", len(tracker.records))
+            c2.metric("输入 Token", f"{tracker.total.input_tokens:,}")
+            c3.metric("输出 Token", f"{tracker.total.output_tokens:,}")
+
+            c4, c5, c6 = st.columns(3)
+            c4.metric("合计 Token", f"{tracker.total.total_tokens:,}")
+            c5.metric("预估成本", f"¥{tracker.total_cost_yuan:.4f}")
+            # 找到实际使用的 model name
+            used_model = tracker.records[0].model if tracker.records else "unknown"
+            c6.metric("模型", used_model)
+
+            st.caption(
+                f"DeepSeek 定价参考: {used_model} "
+                f"输入 ¥{MODEL_PRICING.get(used_model, (1.0, 2.0))[0]}/1M tokens, "
+                f"输出 ¥{MODEL_PRICING.get(used_model, (1.0, 2.0))[1]}/1M tokens"
+            )
+
+            if tracker.records:
+                st.divider()
+                st.caption("调用明细 (最近 20 条)")
+                import pandas as pd
+                rows = []
+                for r in tracker.records[-20:]:
+                    rows.append({
+                        "模型": r.model,
+                        "输入": f"{r.input_tokens:,}",
+                        "输出": f"{r.output_tokens:,}",
+                        "提示词预览": r.prompt_preview[:100],
+                    })
+                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
         brief_text = final_state.get("research_brief") or ""
         if brief_text:
             with st.expander("📋 研究简报", expanded=False):
@@ -215,16 +261,19 @@ if st.button("🚀 开始研究", type="primary", use_container_width=True):
         st.divider()
         st.header("📄 最终研究报告")
 
-        meta_cols = st.columns(4)
+        meta_cols = st.columns(5)
         meta_cols[0].metric("迭代次数", final_state.get("iteration_count", 0))
-        meta_cols[1].metric("质量分", f'{quality_full.get("overall", "?"):.1f}' if isinstance(quality_full.get("overall"), (int, float)) else str(quality_full.get("overall", "?")))
+        meta_cols[1].metric("质量分",
+            f'{quality_full.get("overall", "?"):.1f}'
+            if isinstance(quality_full.get("overall"), (int, float))
+            else str(quality_full.get("overall", "?")))
         meta_cols[2].metric("用时", f"{elapsed:.0f}s")
         meta_cols[3].metric("Researcher", mode.upper())
+        meta_cols[4].metric("Token 成本", f"¥{tracker.total_cost_yuan:.4f}")
 
         final_text = final_state.get("final_report") or final_state.get("draft_report") or "*报告生成失败*"
         st.markdown(final_text)
 
-        # download button
         st.download_button(
             label="📥 下载 Markdown 报告",
             data=final_text,
@@ -254,4 +303,5 @@ else:
     | 8 | 📄 Final Report | 润色生成终稿 |
 
     **质量闭环：** 低分自动进入 red_team → revision → re-eval 循环，直到达标或达到最大迭代次数。
+    **成本追踪：** 每次 LLM 调用自动统计 token 消耗，按 agent 拆分，实时计算 ¥ 成本。
     """)
