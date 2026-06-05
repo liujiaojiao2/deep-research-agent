@@ -42,6 +42,12 @@ with st.sidebar:
         index=0,
         help="ReAct: LLM 自主选工具（N+1 次 LLM 调用）；ReWOO: 一次规划 + 纯执行（1 次 LLM 调用）",
     )
+    search_provider = st.selectbox(
+        "搜索引擎",
+        options=["duckduckgo", "google"],
+        index=0,
+        help="DuckDuckGo 零配置免代理；Google 需网络能访问 google.com（可设 GOOGLE_PROXY 环境变量）",
+    )
     quality_threshold = st.slider(
         "质量阈值",
         min_value=5.0,
@@ -77,6 +83,7 @@ if st.button("🚀 开始研究", type="primary", use_container_width=True):
     # configure env
     os.environ["RESEARCHER_MODE"] = mode
     os.environ["QUALITY_THRESHOLD"] = str(quality_threshold)
+    os.environ["SEARCH_PROVIDER"] = search_provider
 
     # init token tracker and install
     reset_tracker()
