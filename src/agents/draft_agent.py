@@ -96,10 +96,11 @@ def _load_evolution_hint(query: str) -> str:
 
 
 def write_draft_report(state: SupervisorState, llm=None) -> dict:
-    """节点：基于研究资料撰写初稿。"""
+    """节点：基于研究资料撰写初稿，末尾自动追加参考来源。"""
     llm = llm or get_llm_for("draft")
+    research_results = state.get("research_results", [])
     research = "\n\n---\n\n".join(
-        r.get("content", "") for r in state.get("research_results", [])
+        r.get("content", "") for r in research_results
     ) or "（无可用资料）"
     prompt = _DRAFT_PROMPT.format(
         query=state["query"],
@@ -108,4 +109,26 @@ def write_draft_report(state: SupervisorState, llm=None) -> dict:
     )
     response = llm.invoke(prompt)
     content = response.content if hasattr(response, "content") else str(response)
+
+    # 自动追加参考来源（从 research_results 去重提取 URL）
+    sources = _extract_sources(research_results)
+    if sources:
+        ref_section = "\n\n---\n\n## 参考来源\n\n"
+        for i, s in enumerate(sources, 1):
+            ref_section += f"{i}. [{s['title'] or '来源 {i}'}]({s['url']})\n"
+        content += ref_section
+
     return {"draft_report": content}
+
+
+def _extract_sources(research_results: list) -> list[dict]:
+    """从研究结果中提取去重的网页来源 URL。"""
+    seen: set[str] = set()
+    sources: list[dict] = []
+    for r in research_results:
+        url = (r.get("url") or "").strip()
+        title = (r.get("title") or "").strip()
+        if url and url not in seen:
+            seen.add(url)
+            sources.append({"title": title, "url": url})
+    return sources
