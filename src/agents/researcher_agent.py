@@ -83,10 +83,21 @@ def researcher_node(
 
     compressed = compress_research(raw_results, llm=llm)
 
+    # 提取原始来源 URL/标题（去重），保留以供末尾参考来源使用
+    seen_urls: set[str] = set()
+    raw_sources: list[dict] = []
+    for r in raw_results:
+        url = (r.get("url") or "").strip()
+        title = (r.get("title") or "").strip()
+        if url and url not in seen_urls:
+            seen_urls.add(url)
+            raw_sources.append({"title": title, "url": url})
+
     new_entry: ResearchResult = {
         "query": " | ".join(queries),
         "content": compressed,
         "source": "web_search",
+        "sources": raw_sources,
     }
     prev = list(state.get("research_results", []))
     prev.append(new_entry)

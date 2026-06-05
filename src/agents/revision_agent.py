@@ -103,10 +103,20 @@ def revision_node(
                 raw.append({"title": "search_error", "content": f"{q}: {e}", "url": ""})
         if raw:
             compressed = compress_research(raw, llm=llm)
+            # 提取原始来源
+            seen_urls: set[str] = set()
+            raw_sources: list[dict] = []
+            for r in raw:
+                url = (r.get("url") or "").strip()
+                title = (r.get("title") or "").strip()
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    raw_sources.append({"title": title, "url": url})
             research_results.append({
                 "query": " | ".join(supplement_queries),
                 "content": compressed,
                 "source": "supplement",
+                "sources": raw_sources,
             })
 
     # 3. 重写报告

@@ -10,10 +10,11 @@ from typing import Annotated, List, TypedDict
 from langgraph.graph.message import add_messages
 
 
-class ResearchResult(TypedDict):
+class ResearchResult(TypedDict, total=False):
     query: str
     content: str
     source: str
+    sources: list[dict]  # 原始来源列表 [{title, url}]
 
 
 class QualityScore(TypedDict, total=False):

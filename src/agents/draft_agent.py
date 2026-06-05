@@ -115,20 +115,54 @@ def write_draft_report(state: SupervisorState, llm=None) -> dict:
     if sources:
         ref_section = "\n\n---\n\n## 参考来源\n\n"
         for i, s in enumerate(sources, 1):
-            ref_section += f"{i}. [{s['title'] or '来源 {i}'}]({s['url']})\n"
+            title_text = s['title'] if s['title'] else f"来源 {i}"
+            label = f" [{s['source_type']}]" if s.get('source_type') else ""
+            ref_section += f"{i}. **{title_text}**{label}\n   {s['url']}\n"
         content += ref_section
 
     return {"draft_report": content}
 
 
 def _extract_sources(research_results: list) -> list[dict]:
-    """从研究结果中提取去重的网页来源 URL。"""
+    """从研究结果中提取去重的网页来源（标题 + URL + 来源类型）。"""
     seen: set[str] = set()
     sources: list[dict] = []
     for r in research_results:
-        url = (r.get("url") or "").strip()
-        title = (r.get("title") or "").strip()
-        if url and url not in seen:
-            seen.add(url)
-            sources.append({"title": title, "url": url})
+        # 优先使用保存的原始来源列表
+        raw_sources = r.get("sources", [])
+        if raw_sources:
+            for s in raw_sources:
+                url = (s.get("url") or "").strip()
+                title = (s.get("title") or "").strip()
+                if url and url not in seen:
+                    seen.add(url)
+                    source_type = r.get("source", "web_search")
+                    sources.append({
+                        "title": title,
+                        "url": url,
+                        "source_type": _source_label(source_type),
+                    })
+        else:
+            # 兼容旧数据：直接从顶层字段提取
+            url = (r.get("url") or "").strip()
+            title = (r.get("title") or "").strip()
+            if url and url not in seen:
+                seen.add(url)
+                sources.append({
+                    "title": title,
+                    "url": url,
+                    "source_type": _source_label(r.get("source", "")),
+                })
     return sources
+
+
+def _source_label(source: str) -> str:
+    """把 source 字段映射为人类可读的来源类型标签。"""
+    labels = {
+        "web_search": "网页搜索",
+        "supplement": "补充搜索",
+        "local_knowledge": "本地知识库",
+        "wikipedia": "Wikipedia",
+        "arxiv": "ArXiv",
+    }
+    return labels.get(source, source or "网页来源")
