@@ -6,6 +6,10 @@ import sys
 import time
 from datetime import datetime
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import streamlit as st
 
 sys.path.insert(0, os.path.dirname(__file__))
