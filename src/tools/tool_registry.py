@@ -10,6 +10,11 @@ from typing import List
 
 import os
 
+import ssl
+import urllib.request
+import urllib.error
+from html import unescape
+
 from langchain_core.tools import tool
 
 from src.tools.memory_tool import recall_episodic_memory
@@ -137,6 +142,64 @@ def get_current_datetime(timezone: str = "Asia/Shanghai") -> str:
         return f"get_current_datetime 失败: {e}"
 
 
+@tool
+def fetch_webpage(url: str, max_chars: int = 3000) -> str:
+    """抓取网页正文内容，提取纯文本。
+
+    适用场景：
+    - web_search 返回的摘要不够详尽，需要阅读网页完整内容时
+    - 需要核实某个来源的具体说法或数据时
+    - 不要用于下载 PDF、图片等非 HTML 资源
+
+    参数：
+    - url：完整的网页 URL（例如 "https://zh.wikipedia.org/wiki/深度学习"）
+    - max_chars：返回文本的最大字符数，默认 3000
+
+    返回：网页正文纯文本。失败时返回错误说明。
+    """
+    try:
+        from bs4 import BeautifulSoup
+
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "DeepResearchAgent/1.0"
+            },
+        )
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
+            # 只处理 HTML，跳过非文本类型
+            content_type = resp.headers.get("Content-Type", "")
+            if "html" not in content_type and "text" not in content_type:
+                return f"fetch_webpage: 该 URL 不是文本内容 (Content-Type: {content_type})"
+            html = resp.read().decode("utf-8", errors="replace")
+
+        soup = BeautifulSoup(html, "html.parser")
+
+        # 移除不相关的标签
+        for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
+            tag.decompose()
+
+        text = soup.get_text(separator="\n")
+        # 清理：去掉多余空白行
+        lines = [unescape(line.strip()) for line in text.splitlines() if line.strip()]
+        cleaned = "\n".join(lines)
+
+        if len(cleaned) > max_chars:
+            cleaned = cleaned[:max_chars] + "\n...(已截断)"
+
+        return cleaned or "fetch_webpage: 网页无有效正文内容"
+    except urllib.error.HTTPError as e:
+        return f"fetch_webpage: HTTP {e.code} 错误，无法访问 {url}"
+    except urllib.error.URLError as e:
+        return f"fetch_webpage: 无法连接 ({e.reason})"
+    except Exception as e:
+        return f"fetch_webpage 调用失败: {type(e).__name__}: {e}"
+
+
 def get_all_tools() -> list:
     """ReAct researcher 默认装配的全套工具。
 
@@ -153,6 +216,7 @@ def get_all_tools() -> list:
         web_search,
         wikipedia_search,
         arxiv_search,
+        fetch_webpage,
         python_calculator,
         get_current_datetime,
     ])

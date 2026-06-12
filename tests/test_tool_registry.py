@@ -27,6 +27,7 @@ def test_get_all_tools_default_includes_rag_and_memory(monkeypatch):
         "web_search",
         "wikipedia_search",
         "arxiv_search",
+        "fetch_webpage",
         "python_calculator",
         "get_current_datetime",
     ]

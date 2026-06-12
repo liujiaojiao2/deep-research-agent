@@ -5,6 +5,7 @@ description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
     "arxiv>=4.0.0",
+    "beautifulsoup4>=4.14.8",
     "chromadb>=1.5.9",
     "ddgs>=9.14.4",
     "langchain-community>=0.4.2",
