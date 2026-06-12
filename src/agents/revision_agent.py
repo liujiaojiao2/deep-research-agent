@@ -96,11 +96,28 @@ def revision_node(
     # 2. 补搜索（失败不中断流程）
     if supplement_queries:
         raw: list[dict] = []
+        tool_outputs: list[dict] = []
         for q in supplement_queries:
             try:
-                raw.extend(search_fn(q, max_results=max_results_per_query))
+                batch = search_fn(q, max_results=max_results_per_query)
+                raw.extend(batch)
+                total_len = sum(len(r.get("content", "")) for r in batch)
+                tool_outputs.append({
+                    "tool": "web_search",
+                    "query": q,
+                    "result_count": len(batch),
+                    "result_total_chars": total_len,
+                    "snippet": (batch[0].get("content", "") if batch else "")[:200],
+                })
             except Exception as e:
                 raw.append({"title": "search_error", "content": f"{q}: {e}", "url": ""})
+                tool_outputs.append({
+                    "tool": "web_search",
+                    "query": q,
+                    "result_count": 0,
+                    "result_total_chars": 0,
+                    "snippet": f"error: {e}",
+                })
         if raw:
             compressed = compress_research(raw, llm=llm)
             # 提取原始来源
@@ -117,6 +134,7 @@ def revision_node(
                 "content": compressed,
                 "source": "supplement",
                 "sources": raw_sources,
+                "tool_outputs": tool_outputs,
             })
 
     # 3. 重写报告

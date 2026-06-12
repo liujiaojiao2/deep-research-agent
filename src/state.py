@@ -15,6 +15,7 @@ class ResearchResult(TypedDict, total=False):
     content: str
     source: str
     sources: list[dict]  # 原始来源列表 [{title, url}]
+    tool_outputs: list[dict]  # 工具返回摘要 [{tool, query, result_len, snippet}]
 
 
 class QualityScore(TypedDict, total=False):

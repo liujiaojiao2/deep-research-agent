@@ -58,18 +58,21 @@ _EXTRACT_PROMPT = """你是一个 Agent 行为分析师。请从一次成功的�
 质量评分：overall={overall}
 使用工具序列：{tools}
 研究者模式：{researcher_mode}
+工具执行摘要：{tool_summaries}
 
 请严格按 JSON 输出（不要解释）：
 {{
   "name": "技能名称 (3-8个字, 如'算法对比研究')",
   "trigger_keywords": ["关键词1", "关键词2"],
-  "steps_sop": "一句话描述最优工具调用顺序 (如: 先wiki定义双方 -> 再arxiv找对比论文 -> 最后web补充最新进展)"
+  "steps_sop": "详细步骤描述 (如: 步骤1用wiki查双方定义 -> 步骤2用arxiv找对比benchmark -> 步骤3用web补充最新社区讨论)",
+  "failure_modes": "常见问题 (如: arxiv中文论文较少,需配合中文web搜索; wiki定义可能过时,需用web验证)"
 }}
 
 要求：
 - name 应该简洁但准确描述"做了什么类型的研究"
 - trigger_keywords 应该是 2-4 个很具体的关键词，后续用于匹配
-- steps_sop 必须是描述工具调用顺序，不是描述研究内容
+- steps_sop 必须是描述工具调用顺序，不是描述研究内容；参考工具执行摘要中的数据量，不要凭空编造
+- failure_modes 基于摘要中的错误/空结果推断常见坑点
 - 如果这次 run 没有明显的可复用模式，返回 {{"skip": true}}
 """
 
@@ -91,19 +94,28 @@ def extract_skill(state: SupervisorState, llm=None) -> dict | None:
 
     try:
         llm = llm or get_llm()
-        # 提取工具序列
+        # 提取工具序列 + 执行摘要
         tools: list[str] = []
+        tool_summary_lines: list[str] = []
         for r in state.get("research_results") or []:
             src = r.get("source", "") or ""
             if "tools=" in src:
                 tail = src.split("tools=", 1)[1].rstrip(")")
                 tools.extend(t.strip() for t in tail.split(",") if t.strip())
+            # 读取 tool_outputs 构造摘要
+            for to in r.get("tool_outputs") or []:
+                tool_summary_lines.append(
+                    f"  {to.get('tool')}({to.get('query')}): "
+                    f"{to.get('result_count')}条结果, "
+                    f"共{to.get('result_total_chars')}字符"
+                )
 
         prompt = _EXTRACT_PROMPT.format(
             query=state.get("query", "")[:200],
             overall=score,
             tools=", ".join(tools[:10]) or "无记录",
             researcher_mode=os.getenv("RESEARCHER_MODE", "react"),
+            tool_summaries="\n".join(tool_summary_lines) if tool_summary_lines else "(无详细数据)",
         )
         resp = llm.invoke(prompt)
         raw = resp.content if hasattr(resp, "content") else str(resp)
@@ -114,7 +126,8 @@ def extract_skill(state: SupervisorState, llm=None) -> dict | None:
         skill = {
             "name": str(data.get("name", ""))[:30],
             "trigger_keywords": list(data.get("trigger_keywords", []))[:4],
-            "steps_sop": str(data.get("steps_sop", ""))[:300],
+            "steps_sop": str(data.get("steps_sop", ""))[:500],
+            "failure_modes": str(data.get("failure_modes", ""))[:200],
             "success_count": 1,
             "avg_score": score,
         }
@@ -142,12 +155,18 @@ def store_skill(skill: dict) -> bool:
             skill["success_count"] = new_count
             skill["avg_score"] = new_avg
 
-        text = f"技能: {skill['name']}\n触发: {','.join(skill['trigger_keywords'])}\n步骤: {skill['steps_sop']}"
+        text = (
+            f"技能: {skill['name']}\n"
+            f"触发: {','.join(skill['trigger_keywords'])}\n"
+            f"步骤: {skill['steps_sop']}\n"
+            f"常见问题: {skill.get('failure_modes', '')}"
+        )
         emb = embed_texts([text])[0]
         meta = {
             "name": skill["name"],
             "trigger_keywords": json.dumps(skill["trigger_keywords"]),
             "steps_sop": skill["steps_sop"],
+            "failure_modes": skill.get("failure_modes", ""),
             "success_count": skill["success_count"],
             "avg_score": skill["avg_score"],
         }
@@ -182,6 +201,7 @@ def match_skills(query: str, top_k: int = 3) -> list[dict]:
                 "name": meta.get("name", ""),
                 "trigger_keywords": keywords,
                 "steps_sop": meta.get("steps_sop", ""),
+                "failure_modes": meta.get("failure_modes", ""),
                 "success_count": meta.get("success_count", 0) or 0,
                 "avg_score": meta.get("avg_score", 0.0) or 0.0,
                 "similarity": similarity,
@@ -199,13 +219,16 @@ def _format_skill_injection(matched: list[dict], threshold: float = 0.35) -> str
     if not usable:
         return ""
     best = usable[0]
-    return (
+    injection = (
         f"\n[技能提示] 系统检测到本次研究与已有成功技能 \"{best['name']}\" 匹配 "
         f"(相似度={best['similarity']:.2f}, 成功率={best['success_count']}次, "
-        f"平均分={best['avg_score']})。"
-        f"建议工具调用顺序参考: {best['steps_sop']}。"
-        f"你可以自主决定是否采纳此建议。"
+        f"平均分={best['avg_score']})。\n"
+        f"建议步骤: {best['steps_sop']}"
     )
+    if best.get("failure_modes"):
+        injection += f"\n注意事项: {best['failure_modes']}"
+    injection += "\n你可以自主决定是否采纳此建议。"
+    return injection
 
 
 # ---------- 节点 ----------

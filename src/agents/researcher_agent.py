@@ -73,13 +73,30 @@ def researcher_node(
         queries = [state.get("query", "")[:80]]
 
     raw_results: list[dict] = []
+    tool_outputs: list[dict] = []
     for q in queries:
         try:
-            raw_results.extend(search_fn(q, max_results=max_results_per_query))
+            batch = search_fn(q, max_results=max_results_per_query)
+            raw_results.extend(batch)
+            total_len = sum(len(r.get("content", "")) for r in batch)
+            tool_outputs.append({
+                "tool": "web_search",
+                "query": q,
+                "result_count": len(batch),
+                "result_total_chars": total_len,
+                "snippet": (batch[0].get("content", "") if batch else "")[:200],
+            })
         except Exception as e:  # 网络抖动不应中断流程
             raw_results.append(
                 {"title": "search_error", "content": f"查询 {q} 出错: {e}", "url": ""}
             )
+            tool_outputs.append({
+                "tool": "web_search",
+                "query": q,
+                "result_count": 0,
+                "result_total_chars": 0,
+                "snippet": f"error: {e}",
+            })
 
     compressed = compress_research(raw_results, llm=llm)
 
@@ -98,6 +115,7 @@ def researcher_node(
         "content": compressed,
         "source": "web_search",
         "sources": raw_sources,
+        "tool_outputs": tool_outputs,
     }
     prev = list(state.get("research_results", []))
     prev.append(new_entry)
