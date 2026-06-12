@@ -155,13 +155,13 @@ def store_skill(skill: dict) -> bool:
             skill["success_count"] = new_count
             skill["avg_score"] = new_avg
 
-        text = (
+        # 渐进式披露：轻量文本用于嵌入/检索，重量内容存 metadata
+        light_text = (
             f"技能: {skill['name']}\n"
-            f"触发: {','.join(skill['trigger_keywords'])}\n"
-            f"步骤: {skill['steps_sop']}\n"
-            f"常见问题: {skill.get('failure_modes', '')}"
+            f"触发关键词: {','.join(skill['trigger_keywords'])}\n"
+            f"描述: 成功{skill['success_count']}次, 均分{skill['avg_score']}"
         )
-        emb = embed_texts([text])[0]
+        emb = embed_texts([light_text])[0]
         meta = {
             "name": skill["name"],
             "trigger_keywords": json.dumps(skill["trigger_keywords"]),
@@ -170,7 +170,7 @@ def store_skill(skill: dict) -> bool:
             "success_count": skill["success_count"],
             "avg_score": skill["avg_score"],
         }
-        coll.upsert(ids=[name], documents=[text], metadatas=[meta], embeddings=[emb])
+        coll.upsert(ids=[name], documents=[light_text], metadatas=[meta], embeddings=[emb])
         return True
     except Exception as e:
         logger.warning("store_skill failed: %s", e)
@@ -178,30 +178,32 @@ def store_skill(skill: dict) -> bool:
 
 
 def match_skills(query: str, top_k: int = 3) -> list[dict]:
-    """匹配可用技能。先语义检索，再关键词加权。"""
+    """第一级：扫描所有 skill 的 name + 关键词，返回轻量匹配列表。
+
+    只返回 name / keywords / similarity / stats，不包含重量内容。
+    需要详细步骤时调用 expand_skill() 展开。
+    """
     try:
         coll = _get_skill_collection()
         if coll.count() == 0:
             return []
         emb = embed_texts([query])[0]
-        result = coll.query(query_embeddings=[emb], n_results=top_k)
-        docs = result.get("documents", [[]])[0]
+        # 只取 metadatas + distances，不取 heavy document
+        result = coll.query(query_embeddings=[emb], n_results=top_k,
+                          include=["metadatas", "distances"])
         metas = result.get("metadatas", [[]])[0]
         dists = result.get("distances", [[]])[0]
 
         matched = []
-        for doc, meta, dist in zip(docs, metas, dists):
+        for meta, dist in zip(metas, dists):
             if not meta:
                 continue
             keywords = json.loads(meta.get("trigger_keywords", "[]"))
-            # 关键词加分: query 中含触发关键词 → 分数加权
             kw_bonus = sum(1 for kw in keywords if kw in query) * 0.05
             similarity = round(1.0 - float(dist) + kw_bonus, 4)
             matched.append({
                 "name": meta.get("name", ""),
                 "trigger_keywords": keywords,
-                "steps_sop": meta.get("steps_sop", ""),
-                "failure_modes": meta.get("failure_modes", ""),
                 "success_count": meta.get("success_count", 0) or 0,
                 "avg_score": meta.get("avg_score", 0.0) or 0.0,
                 "similarity": similarity,
@@ -213,22 +215,56 @@ def match_skills(query: str, top_k: int = 3) -> list[dict]:
         return []
 
 
+def expand_skill(name: str) -> dict | None:
+    """第二级：按名称展开 skill 的完整内容（步骤 SOP + 失败模式）。"""
+    try:
+        coll = _get_skill_collection()
+        result = coll.get(ids=[name])
+        metas = result.get("metadatas", [])
+        if not metas:
+            return None
+        meta = metas[0]
+        return {
+            "name": meta.get("name", ""),
+            "steps_sop": meta.get("steps_sop", ""),
+            "failure_modes": meta.get("failure_modes", ""),
+            "success_count": meta.get("success_count", 0) or 0,
+            "avg_score": meta.get("avg_score", 0.0) or 0.0,
+        }
+    except Exception as e:
+        logger.warning("expand_skill failed: %s", e)
+        return None
+
+
 def _format_skill_injection(matched: list[dict], threshold: float = 0.35) -> str:
-    """把匹配的 skill 凝练为 researcher 注入片段。"""
+    """渐进式披露注入：
+    第一级 — 列出所有匹配 skill 的 name + 相似度（轻量扫描结果）
+    第二级 — 展开最佳匹配 skill 的完整内容（步骤 SOP + 注意事项）
+    """
     usable = [s for s in matched if s["similarity"] >= threshold]
     if not usable:
         return ""
+
+    # 第一级：展示扫描结果（所有候选 skill 的摘要）
+    lines = ["\n[技能扫描] 发现以下可复用技能："]
+    for i, s in enumerate(usable, 1):
+        lines.append(
+            f"  {i}. {s['name']} "
+            f"(相似度={s['similarity']:.2f}, 成功{s['success_count']}次, 均分{s['avg_score']})"
+        )
+
+    # 第二级：展开最佳匹配的完整内容（优先 ChromaDB，降级用传入数据）
     best = usable[0]
-    injection = (
-        f"\n[技能提示] 系统检测到本次研究与已有成功技能 \"{best['name']}\" 匹配 "
-        f"(相似度={best['similarity']:.2f}, 成功率={best['success_count']}次, "
-        f"平均分={best['avg_score']})。\n"
-        f"建议步骤: {best['steps_sop']}"
-    )
-    if best.get("failure_modes"):
-        injection += f"\n注意事项: {best['failure_modes']}"
-    injection += "\n你可以自主决定是否采纳此建议。"
-    return injection
+    expanded = expand_skill(best["name"]) or best  # ChromaDB 未命中时用轻量数据
+    if expanded.get("steps_sop"):
+        lines.append(f"\n[最佳匹配: {expanded['name']}]")
+        lines.append(f"步骤: {expanded['steps_sop']}")
+        if expanded.get("failure_modes"):
+            lines.append(f"注意事项: {expanded['failure_modes']}")
+        lines.append(f"历史: 成功{expanded.get('success_count', best['success_count'])}次, "
+                     f"均分{expanded.get('avg_score', best['avg_score'])}")
+    lines.append("你可以自主决定是否采纳此建议。")
+    return "\n".join(lines)
 
 
 # ---------- 节点 ----------
