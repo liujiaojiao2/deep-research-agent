@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
 
 from src.config import get_llm
 from src.rag import embed_texts, get_collection
@@ -265,6 +266,115 @@ def _format_skill_injection(matched: list[dict], threshold: float = 0.35) -> str
                      f"均分{expanded.get('avg_score', best['avg_score'])}")
     lines.append("你可以自主决定是否采纳此建议。")
     return "\n".join(lines)
+
+
+# ---------- MD 导出 ----------
+
+SKILL_EXPORT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "skills")
+
+
+def list_all_skills() -> list[dict]:
+    """列出所有已存储的 skill（轻量摘要）。"""
+    try:
+        coll = _get_skill_collection()
+        if coll.count() == 0:
+            return []
+        result = coll.get(include=["metadatas"])
+        skills = []
+        for meta in (result.get("metadatas") or []):
+            skills.append({
+                "name": meta.get("name", ""),
+                "trigger_keywords": json.loads(meta.get("trigger_keywords", "[]")),
+                "steps_sop": meta.get("steps_sop", ""),
+                "failure_modes": meta.get("failure_modes", ""),
+                "success_count": meta.get("success_count", 0) or 0,
+                "avg_score": meta.get("avg_score", 0.0) or 0.0,
+            })
+        skills.sort(key=lambda x: x["avg_score"], reverse=True)
+        return skills
+    except Exception as e:
+        logger.warning("list_all_skills failed: %s", e)
+        return []
+
+
+def _build_description(skill: dict) -> str:
+    """从 keywords + stats 自动生成 description 字段。"""
+    kw_str = "、".join(skill.get("trigger_keywords", [])[:3])
+    desc = f"从成功研究中提炼的可复用技能。触发关键词: {kw_str}。"
+    desc += f" 历史成功{skill.get('success_count', 0)}次, 均分{skill.get('avg_score', 0)}。"
+    return desc
+
+
+def export_skill_to_md(skill_name: str, output_dir: str | None = None) -> str | None:
+    """把一条 skill 导出为 Anthropic 标准 SKILL.md 格式。
+
+    Args:
+        skill_name: 技能名称
+        output_dir: 输出目录，默认 skills/
+
+    Returns:
+        写入的文件路径，失败或无此 skill 返回 None
+    """
+    skill = expand_skill(skill_name)
+    if not skill:
+        logger.warning("skill %r not found, cannot export", skill_name)
+        return None
+
+    # 从 ChromaDB metadata 取完整数据（含 keywords）
+    coll = _get_skill_collection()
+    result = coll.get(ids=[skill_name])
+    metas = result.get("metadatas", [])
+    full = skill
+    if metas:
+        meta = metas[0]
+        full["trigger_keywords"] = json.loads(meta.get("trigger_keywords", "[]"))
+
+    safe_name = re.sub(r'[\\/:*?"<>|]', "", skill_name).replace(" ", "-")
+    dir_path = Path(output_dir or SKILL_EXPORT_DIR) / safe_name
+    dir_path.mkdir(parents=True, exist_ok=True)
+
+    desc = _build_description(full)
+
+    md = f"""---
+name: {safe_name}
+description: {desc}
+---
+
+# {skill_name}
+
+## 步骤
+
+{skill.get('steps_sop', '(无)')}
+
+## 注意事项
+
+{skill.get('failure_modes', '暂无已知坑点')}
+
+## 历史统计
+
+- 成功次数: {skill.get('success_count', 0)}
+- 平均评分: {skill.get('avg_score', 0)}
+"""
+
+    filepath = dir_path / "SKILL.md"
+    filepath.write_text(md, encoding="utf-8")
+    logger.info("Exported skill to %s", filepath)
+    return str(filepath)
+
+
+def export_all_skills_to_md(output_dir: str | None = None) -> list[str]:
+    """把 ChromaDB 中所有 skill 导出为 SKILL.md 文件。
+
+    Returns:
+        成功导出的文件路径列表
+    """
+    skills = list_all_skills()
+    paths = []
+    for s in skills:
+        path = export_skill_to_md(s["name"], output_dir=output_dir)
+        if path:
+            paths.append(path)
+    return paths
 
 
 # ---------- 节点 ----------
