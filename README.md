@@ -2,6 +2,12 @@
 
 基于 LangGraph 的多 Agent 深度研究系统，带自进化（Red Team / Quality / Revision）闭环。
 
+## 🎬 系统演示
+
+https://github.com/liujiaojiao2/deep-research-agent/raw/master/docs/demo.mp4
+
+> 若上方视频未自动播放，点此下载观看：[docs/demo.mp4](docs/demo.mp4)
+
 - 主 LLM：**DeepSeek**（兼容 OpenAI 协议）
 - 搜索：**DuckDuckGo**（零配置）
 - 框架：**LangGraph 1.x**
