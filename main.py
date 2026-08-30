@@ -53,6 +53,7 @@ def run_research(
     save_dir: Optional[Path] = None,
     recursion_limit: int = 50,
     interactive: bool = False,
+    enrich_mindmap: bool = False,
 ) -> str:
     """跑完整流程，返回 final_report；副作用：把 markdown 写到 outputs/。"""
     save_dir = save_dir or Path(__file__).parent / "outputs"
@@ -80,6 +81,7 @@ def run_research(
             out_path = save_dir / f"report_{run_id}_cached.md"
             out_path.write_text(cached["final_report"], encoding="utf-8")
             console.print(f"📄 报告（来自缓存）保存至: {out_path}")
+            _write_mindmap_sidecars(out_path, cached["final_report"], query, enrich_mindmap)
             return cached["final_report"]
 
     graph = build_main_graph(interactive=interactive)
@@ -126,6 +128,7 @@ def run_research(
     save_dir.mkdir(parents=True, exist_ok=True)
     out_path = save_dir / f"report_{run_id}.md"
     out_path.write_text(final_state["final_report"], encoding="utf-8")
+    _write_mindmap_sidecars(out_path, final_state["final_report"], query, enrich_mindmap)
 
     # Phase 7.7: 出口泄露检测（仅警示，不阻断）
     leak_sus, leak_hits = security.detect_prompt_leakage(final_state["final_report"])
@@ -156,6 +159,21 @@ def run_research(
         )
 
     return final_state["final_report"]
+
+
+def _write_mindmap_sidecars(md_path: Path, md_text: str, query: str, enrich: bool) -> None:
+    """在报告旁边写 .outline.md 和 .mindmap.html；失败仅警告不中断。"""
+    try:
+        from src.tools.mindmap_tool import write_siblings
+        outline_path, mm_path = write_siblings(
+            md_path, md_text, enrich=enrich, title=query[:60] or md_path.stem
+        )
+        console.print(f"🧠 大纲: {outline_path}")
+        console.print(f"🌳 思维导图: {mm_path}")
+    except Exception as e:
+        console.print(
+            f"[yellow]⚠️ 生成 outline/mindmap 失败（不影响主流程）: {e}[/yellow]"
+        )
 
 
 def _extract_interrupt_payload(update) -> dict:
@@ -273,6 +291,11 @@ def _parse_args(argv):
         action="store_true",
         help="启用 HITL：每次 quality_eval 后暂停等用户决策",
     )
+    p.add_argument(
+        "--enrich-mindmap",
+        action="store_true",
+        help="用 LLM 为大纲/思维导图每个 heading 补充关键要点叶子（额外 token 成本）",
+    )
     return p.parse_args(argv)
 
 
@@ -291,6 +314,7 @@ def main(argv=None):
         max_iter=args.max_iter,
         recursion_limit=args.recursion_limit,
         interactive=args.interactive,
+        enrich_mindmap=args.enrich_mindmap,
     )
 
 

@@ -170,6 +170,39 @@ def python_calculator(expression: str) -> str:
         return f"计算失败: {e}"
 
 
+@mcp.tool()
+def markdown_to_outline(markdown: str) -> str:
+    """从 Markdown 报告抽取规范化层级大纲（#/##/- 结构）。
+
+    纯正则实现，无 LLM 调用；自动跳过 fenced code block 内部的 `#` 行。
+
+    Args:
+        markdown: 完整 Markdown 报告文本
+
+    Returns:
+        规范化 outline 文本，可直接用于阅读或喂给 markmap 渲染
+    """
+    from src.tools.mindmap_tool import report_to_outline
+    return report_to_outline(markdown)
+
+
+@mcp.tool()
+def markdown_to_mindmap_html(markdown: str, title: str = "MindMap") -> str:
+    """把 Markdown 报告渲染为自包含的可交互思维导图 HTML（markmap-autoloader）。
+
+    HTML 使用 CDN 加载 markmap-autoloader；浏览器打开即可缩放/折叠。
+
+    Args:
+        markdown: 完整 Markdown 报告文本
+        title: 页面标题
+
+    Returns:
+        单文件 HTML 字符串
+    """
+    from src.tools.mindmap_tool import report_to_mindmap_html
+    return report_to_mindmap_html(markdown, title=title)
+
+
 # ---------- 元资源：把项目信息暴露为 MCP resource ----------
 
 @mcp.resource("trace://latest")

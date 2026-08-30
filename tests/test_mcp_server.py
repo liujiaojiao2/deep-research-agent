@@ -31,8 +31,24 @@ def test_six_tools_registered():
         "local_knowledge_search",
         "recall_episodic_memory",
         "python_calculator",
+        "markdown_to_outline",
+        "markdown_to_mindmap_html",
     }
     assert expected.issubset(set(names)), f"missing: {expected - set(names)}"
+
+
+def test_markdown_to_outline_direct_call():
+    mod = _load_mcp_module()
+    out = mod.markdown_to_outline("# A\n## B\n段落\n- 点\n")
+    assert "# A" in out and "## B" in out
+
+
+def test_markdown_to_mindmap_html_direct_call():
+    mod = _load_mcp_module()
+    out = mod.markdown_to_mindmap_html("# T\n## Sub\n", title="hello")
+    assert "hello" in out
+    assert "markmap-autoloader" in out
+    assert "# T" in out
 
 
 def test_python_calculator_direct_call():

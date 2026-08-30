@@ -1,5 +1,5 @@
 """DeepResearch Agent 主图组装。
-
+定义拓扑结构
 节点：
     supervisor → 决策下一步
     brief_writer → 生成研究简报

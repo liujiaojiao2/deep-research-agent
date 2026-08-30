@@ -1,5 +1,5 @@
 """DeepResearch Agent 全局状态定义。
-
+定义状态真实的状态集合
 所有 Agent 在同一个 SupervisorState 上读写，由 LangGraph 的 StateGraph 驱动。
 新增字段时务必更新 main.py 里的 initial_state，避免 KeyError。
 """

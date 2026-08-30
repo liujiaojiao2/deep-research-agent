@@ -68,6 +68,11 @@ with st.sidebar:
         value=3,
         help="自进化（red_team → revision → re-eval）的最大轮次",
     )
+    enrich_mindmap = st.checkbox(
+        "🌳 思维导图 LLM 增强",
+        value=False,
+        help="给大纲每个 heading 补 3-5 个关键要点叶子（额外 LLM 调用，~2-4k output tokens）",
+    )
     st.divider()
     obs_ok = is_obsidian_configured()
     if obs_ok:
@@ -289,15 +294,47 @@ if st.button("🚀 开始研究", type="primary", use_container_width=True):
         meta_cols[4].metric("Token 成本", f"¥{tracker.total_cost_yuan:.4f}")
 
         final_text = final_state.get("final_report") or final_state.get("draft_report") or "*报告生成失败*"
-        st.markdown(final_text)
 
-        dl_col, obs_col = st.columns([1, 1])
-        with dl_col:
+        from src.tools.mindmap_tool import report_to_mindmap_html, report_to_outline
+        import streamlit.components.v1 as components
+
+        outline_md = report_to_outline(final_text, enrich=enrich_mindmap)
+        mindmap_html = report_to_mindmap_html(
+            final_text, enrich=enrich_mindmap, title=query.strip()[:60] or "MindMap"
+        )
+
+        tab_md, tab_outline, tab_mm = st.tabs(["📄 报告", "📝 大纲", "🌳 思维导图"])
+        with tab_md:
+            st.markdown(final_text)
+        with tab_outline:
+            st.code(outline_md, language="markdown")
+        with tab_mm:
+            components.html(mindmap_html, height=650, scrolling=True)
+
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dl_col1, dl_col2, dl_col3, obs_col = st.columns([1, 1, 1, 1])
+        with dl_col1:
             st.download_button(
-                label="📥 下载 Markdown 报告",
+                label="📥 下载报告",
                 data=final_text,
-                file_name=f"research_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                file_name=f"research_{ts}.md",
                 mime="text/markdown",
+                use_container_width=True,
+            )
+        with dl_col2:
+            st.download_button(
+                label="📥 下载大纲",
+                data=outline_md,
+                file_name=f"outline_{ts}.md",
+                mime="text/markdown",
+                use_container_width=True,
+            )
+        with dl_col3:
+            st.download_button(
+                label="📥 下载思维导图",
+                data=mindmap_html,
+                file_name=f"mindmap_{ts}.html",
+                mime="text/html",
                 use_container_width=True,
             )
         with obs_col:

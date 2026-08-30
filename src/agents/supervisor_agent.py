@@ -1,5 +1,5 @@
 """Supervisor —— 纯函数状态机，无 LLM 调用，每次只决定 next_agent。
-
+定义转移规则
 决策树（按顺序短路）：
   1. 无 research_brief             → brief_writer
   2. 无 research_results           → researcher
