@@ -4,11 +4,9 @@
 
 ## 🎬 系统演示
 
-[![DeepResearch Agent 演示](docs/demo_poster.png)](https://github.com/liujiaojiao2/deep-research-agent/raw/master/docs/demo.mp4)
 
-▶️ **点击上方封面播放完整演示**（约 20s）：Streamlit 界面输入研究问题 → Supervisor 路由多 Agent 协作 → 实时 Token / 成本追踪 → 报告 / 大纲 / 思维导图三视图输出。
+https://github.com/user-attachments/assets/6ff6e351-22f6-49ee-ad22-4b7d12e334a2
 
-> 也可直接下载观看：[docs/demo.mp4](docs/demo.mp4)（6.4 MB）
 
 - 主 LLM：**DeepSeek**（兼容 OpenAI 协议）
 - 搜索：**DuckDuckGo**（零配置）
