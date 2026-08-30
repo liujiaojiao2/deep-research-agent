@@ -59,8 +59,14 @@ def main():
         else:
             j = r["judge_score"]
             kw = r["keyword_hits"]
+            qs = r.get("quality_score") or {}
+            qo = qs.get("overall", 0)
+            jo = j.get("overall", 0)
+            delta = round(qo - jo, 2) if qo and jo else 0
+            bias_tag = f" delta={delta}" if delta else ""
             console.print(
-                f"  [green]✅[/green] judge overall=[bold]{j.get('overall')}[/bold]  "
+                f"  [green]✅[/green] judge=[bold]{jo}[/bold] quality=[bold]{qo}[/bold]"
+                f"[yellow]{bias_tag}[/yellow]  "
                 f"answer={j.get('answer_relevance')}  citation={j.get('citation')}  "
                 f"kw {kw['hits']}/{kw['total']}  tools={','.join(r.get('tools_used', [])) or '—'}  "
                 f"用时 {r['elapsed_sec']}s"
