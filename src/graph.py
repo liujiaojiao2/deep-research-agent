@@ -20,8 +20,10 @@
 from __future__ import annotations
 
 import os
+import sqlite3
+from pathlib import Path
 
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, StateGraph
 
 from src.agents import (
@@ -92,12 +94,34 @@ def _select_researcher():
     return react_researcher_node  # 默认 react
 
 
+_CHECKPOINTER: SqliteSaver | None = None
+
+
+def get_checkpointer() -> SqliteSaver:
+    """进程级单例持久化 checkpointer：状态落盘到 .checkpoints/checkpoints.sqlite。
+
+    用持久连接 + check_same_thread=False，兼容 Streamlit 多线程与长生命周期进程；
+    路径可用环境变量 CHECKPOINT_DB_PATH 覆盖。
+    """
+    global _CHECKPOINTER
+    if _CHECKPOINTER is None:
+        db_path = os.environ.get("CHECKPOINT_DB_PATH") or str(
+            Path(__file__).resolve().parent.parent / ".checkpoints" / "checkpoints.sqlite"
+        )
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        saver = SqliteSaver(conn)
+        saver.setup()
+        _CHECKPOINTER = saver
+    return _CHECKPOINTER
+
+
 def build_main_graph(interactive: bool = False):
     """主图组装。
 
     interactive=True 时：
       · quality_eval → human_review（暂停等用户决策）→ supervisor
-      · 同时注入 InMemorySaver；调用方必须传 thread_id
+      · 注入持久化 SqliteSaver；调用方必须传 thread_id
     interactive=False 时：原图（quality_eval 直接回 supervisor）
     """
     g = StateGraph(SupervisorState)
@@ -153,6 +177,6 @@ def build_main_graph(interactive: bool = False):
     g.add_edge("evolution_log", "skill_library")
     g.add_edge("skill_library", END)
 
-    if interactive:
-        return g.compile(checkpointer=InMemorySaver())
-    return g.compile()
+    # 两个模式都挂持久化 checkpointer：交互模式支持 interrupt/resume，
+    # 非交互模式获得崩溃后按 thread_id 续跑能力。调用方必须传 thread_id。
+    return g.compile(checkpointer=get_checkpointer())

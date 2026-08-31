@@ -54,6 +54,8 @@ def run_research(
     recursion_limit: int = 50,
     interactive: bool = False,
     enrich_mindmap: bool = False,
+    thread_id: Optional[str] = None,
+    resume: bool = False,
 ) -> str:
     """跑完整流程，返回 final_report；副作用：把 markdown 写到 outputs/。"""
     save_dir = save_dir or Path(__file__).parent / "outputs"
@@ -67,8 +69,8 @@ def run_research(
 
     console.rule(f"[bold cyan]🔍 开始研究：{query[:100]}[/bold cyan]")
 
-    # Phase 7.3: 缓存命中检查（非 interactive 才命中）
-    if not interactive:
+    # Phase 7.3: 缓存命中检查（非 interactive 才命中；resume 时跳过，直接续跑 checkpoint）
+    if not interactive and not resume:
         cached = cache.lookup(query)
         if cached is not None:
             console.print(
@@ -87,15 +89,25 @@ def run_research(
     graph = build_main_graph(interactive=interactive)
     state = _initial_state(query, max_iter)
 
-    config = {"recursion_limit": recursion_limit}
+    tid = thread_id or f"research-{uuid.uuid4().hex[:8]}"
+    config = {"recursion_limit": recursion_limit, "configurable": {"thread_id": tid}}
+    console.print(f"[dim]thread_id={tid}（状态持久化到 .checkpoints/）[/dim]")
     if interactive:
-        config["configurable"] = {"thread_id": f"research-{uuid.uuid4().hex[:8]}"}
         console.print("[dim]Interactive 模式：每次 quality_eval 后会暂停等你决策。[/dim]")
 
     tracer = Tracer(query=query, run_id=run_id)
 
     final_state = state
-    next_input = state
+    # resume：输入传 None，让 LangGraph 从该 thread_id 的最近 checkpoint 续跑
+    next_input = None if resume else state
+    if resume:
+        existing = graph.get_state(config)
+        if not (existing and existing.values):
+            console.print(
+                f"[bold red]✗ 找不到 thread_id={tid} 的 checkpoint，无法续跑。[/bold red]"
+            )
+            sys.exit(1)
+        console.print(f"[bold]↩️  resume：从 thread_id={tid} 的最近 checkpoint 续跑[/bold]")
     while True:
         interrupted = False
         for event in graph.stream(next_input, config=config):
@@ -115,11 +127,10 @@ def run_research(
         if not interrupted:
             break  # stream 自然结束
 
-    # interactive 模式下 final_state 缺字段，需要从 checkpointer 拿最终 state
-    if interactive:
-        snapshot = graph.get_state(config)
-        if snapshot and snapshot.values:
-            final_state = snapshot.values
+    # 从 checkpointer 拿权威最终 state（两模式都挂了持久化；interactive/resume 尤其需要）
+    snapshot = graph.get_state(config)
+    if snapshot and snapshot.values:
+        final_state = snapshot.values
 
     if not final_state.get("final_report"):
         console.print("[red]⚠️ 流程结束但 final_report 为空，请检查日志。[/red]")
@@ -296,25 +307,39 @@ def _parse_args(argv):
         action="store_true",
         help="用 LLM 为大纲/思维导图每个 heading 补充关键要点叶子（额外 token 成本）",
     )
+    p.add_argument(
+        "--thread-id",
+        default=None,
+        help="指定可复用的 thread_id（默认随机生成）；持久化状态按此 id 存取",
+    )
+    p.add_argument(
+        "--resume",
+        default=None,
+        metavar="THREAD_ID",
+        help="从指定 thread_id 的最近 checkpoint 续跑（崩溃/中断恢复），跳过缓存",
+    )
     return p.parse_args(argv)
 
 
 def main(argv=None):
     args = _parse_args(argv)
-    if not args.query:
+    if not args.query and not args.resume:
         console.print(
             Panel.fit(
-                "用法：uv run python main.py \"你的研究问题\" [--max-iter 3] [--interactive]",
+                "用法：uv run python main.py \"你的研究问题\" [--max-iter 3] [--interactive]\n"
+                "续跑：uv run python main.py --resume <thread_id>",
                 title="DeepResearch Agent",
             )
         )
         sys.exit(1)
     run_research(
-        args.query,
+        args.query or "",
         max_iter=args.max_iter,
         recursion_limit=args.recursion_limit,
         interactive=args.interactive,
         enrich_mindmap=args.enrich_mindmap,
+        thread_id=args.resume or args.thread_id,
+        resume=bool(args.resume),
     )
 
 

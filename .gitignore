@@ -16,6 +16,7 @@ wheels/
 outputs/*.md
 outputs/*.html
 .chroma/
+.checkpoints/
 .ruff_cache/
 .pytest_cache/
 

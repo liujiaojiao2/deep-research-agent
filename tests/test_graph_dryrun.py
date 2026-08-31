@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import uuid
 from types import SimpleNamespace
 
 import pytest
@@ -98,7 +99,7 @@ def test_happy_path_high_score_one_iter(monkeypatch):
         "is_complete": False,
         "messages": [],
     }
-    final = graph.invoke(initial)
+    final = graph.invoke(initial, config={"configurable": {"thread_id": uuid.uuid4().hex}})
 
     assert final["is_complete"] is True
     assert final["final_report"].startswith("# 终稿")
@@ -167,7 +168,7 @@ def test_self_evolution_low_then_high(monkeypatch):
         "is_complete": False,
         "messages": [],
     }
-    final = graph.invoke(initial)
+    final = graph.invoke(initial, config={"configurable": {"thread_id": uuid.uuid4().hex}})
 
     assert final["is_complete"] is True
     assert final["final_report"].startswith("# 终稿")

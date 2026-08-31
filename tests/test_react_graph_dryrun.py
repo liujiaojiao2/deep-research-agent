@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import uuid
 from types import SimpleNamespace
 
 import pytest
@@ -97,7 +98,7 @@ def test_react_mode_happy_path(monkeypatch):
         "is_complete": False,
         "messages": [],
     }
-    final = graph.invoke(initial)
+    final = graph.invoke(initial, config={"configurable": {"thread_id": uuid.uuid4().hex}})
 
     assert final["is_complete"] is True
     assert final["final_report"].startswith("# 终稿")

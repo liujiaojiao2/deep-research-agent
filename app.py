@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+import uuid
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -109,6 +110,9 @@ if st.button("🚀 开始研究", type="primary", use_container_width=True):
 
     graph = build_main_graph(interactive=False)
 
+    # 持久化 checkpointer 要求 config 带 thread_id；每次点「开始研究」用独立 id
+    thread_id = f"streamlit-{uuid.uuid4().hex[:8]}"
+
     initial_state = {
         "query": query.strip(),
         "research_brief": "",
@@ -149,7 +153,8 @@ if st.button("🚀 开始研究", type="primary", use_container_width=True):
     final_state = initial_state
 
     try:
-        for event in graph.stream(initial_state, config={"recursion_limit": 50}):
+        stream_config = {"recursion_limit": 50, "configurable": {"thread_id": thread_id}}
+        for event in graph.stream(initial_state, config=stream_config):
             for node_name, update in event.items():
                 final_state = {**final_state, **(update or {})}
 
