@@ -95,6 +95,28 @@ uv run python main.py "你的问题" --interactive
 # 在每次 quality_eval 后暂停，5 选 1：approve / reject / force_final / edit_report / custom_score
 ```
 
+### 持久化 checkpointer / 断点续跑
+
+主图用 **LangGraph 持久化 checkpointer（SqliteSaver）** 落盘，交互与非交互模式都挂载。
+状态写入 `.checkpoints/checkpoints.sqlite`（跨进程可读），进程崩溃或中断后可凭 `thread_id`
+从最近节点续跑，无需从头重跑。
+
+```bash
+# 指定可复用的 thread_id（默认随机生成）
+uv run python main.py "你的问题" --thread-id my-run-001
+
+# 崩溃 / 中断后，从最近 checkpoint 续跑（跳过缓存）
+uv run python main.py --resume my-run-001
+```
+
+| 能力 | 内存版（旧 InMemorySaver） | 持久化版（SqliteSaver） |
+|---|---|---|
+| 状态存储 | 进程内存 | `.checkpoints/` 落盘 |
+| 生效模式 | 仅 `--interactive` | 交互 + 非交互 |
+| 进程重启/崩溃后 | 状态丢失 | 凭 `thread_id` 续跑 |
+
+> 存储路径可用环境变量 `CHECKPOINT_DB_PATH` 覆盖。
+
 ### RAG（本地知识库）
 
 ```bash
